@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Environment variables (never commit secrets)
+.env
+
+# Log files
+*.log
+
+# Kiro spec files (internal dev tooling)
+.kiro/
+
+# Editor config
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

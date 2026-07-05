@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monitor de Rede</title>
+  <!-- Favicon SVG inline -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23111827'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%2322c55e'/%3E%3Cpath d='M16 16 m-7 0 a7 7 0 0 1 14 0' fill='none' stroke='%2322c55e' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M16 16 m-11 0 a11 11 0 0 1 22 0' fill='none' stroke='%2322c55e' stroke-width='2' stroke-linecap='round' opacity='.5'/%3E%3C/svg%3E" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' };
+  </script>
+  <style>
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+    /* Chart tooltip */
+    .chart-bar { position: relative; cursor: default; }
+    .chart-bar:hover .chart-tip { display: block; }
+    .chart-tip {
+      display: none; position: absolute; bottom: 110%; left: 50%;
+      transform: translateX(-50%); background: #1f2937;
+      color: #f3f4f6; font-size: 11px; padding: 3px 7px;
+      border-radius: 5px; white-space: nowrap; z-index: 10;
+      border: 1px solid #374151; pointer-events: none;
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans">
+
+  <!-- Header -->
+  <header class="bg-gray-900 border-b border-gray-800 px-4 sm:px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <svg class="w-5 h-5 text-green-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <!-- Wifi/signal waves icon representing network monitoring -->
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12 20.25h.008v.008H12v-.008z" />
+      </svg>
+      <h1 class="text-base font-semibold text-white tracking-tight">Monitor de Rede</h1>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="status-indicator" class="w-3 h-3 rounded-full bg-gray-500 pulse-dot inline-block"></span>
+      <span id="status-text" class="text-sm font-medium text-gray-400">—</span>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-3 sm:px-6 py-6 space-y-6">
+
+    <!-- Dashboard Cards -->
+    <section>
+      <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Status Atual</h2>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-1">
+          <span class="text-xs text-gray-500 uppercase tracking-wider">Conectividade</span>
+          <div class="flex items-center gap-2">
+            <span id="status-indicator-card" class="w-2 h-2 rounded-full bg-gray-500 pulse-dot shrink-0"></span>
+            <span id="status-text-card" class="text-xl font-bold text-gray-300">—</span>
+          </div>
+          <div id="current-outage-duration" class="hidden">
+            <span class="text-xs text-red-400">Queda: </span>
+            <span id="current-outage-duration-value" class="text-xs text-red-300"></span>
+          </div>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-1">
+          <span class="text-xs text-gray-500 uppercase tracking-wider">IP Atual</span>
+          <span id="current-ip" class="text-sm font-bold font-mono text-gray-300 break-all">—</span>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-1">
+          <span class="text-xs text-gray-500 uppercase tracking-wider">Última Leitura</span>
+          <span id="last-updated" class="text-xs font-medium text-gray-300">—</span>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-1">
+          <span class="text-xs text-gray-500 uppercase tracking-wider">Quedas Hoje</span>
+          <span id="outages-today" class="text-xl font-bold text-gray-300">—</span>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Chart Section -->
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-widest">
+          Disponibilidade <span class="normal-case text-gray-600 font-normal">(últimas 24h)</span>
+        </h2>
+        <span class="text-sm text-gray-500">
+          Uptime: <span id="uptime-percent" class="font-semibold text-gray-300">—</span>
+        </span>
+      </div>
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div id="chart-container" class="w-full min-h-[100px] flex items-center justify-center text-gray-600 text-sm">
+          Aguardando dados...
+        </div>
+      </div>
+    </section>
+
+    <!-- Outages Section -->
+    <section>
+      <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Histórico de Quedas</h2>
+      <!-- Desktop table -->
+      <div class="hidden sm:block bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-800 text-left">
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">#</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Início</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Fim</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Duração</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Registros</th>
+            </tr>
+          </thead>
+          <tbody id="outages-table-body">
+            <tr><td colspan="5" class="px-4 py-8 text-center text-gray-600 text-sm">Aguardando dados...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Mobile cards -->
+      <div id="outages-cards" class="sm:hidden space-y-2"></div>
+    </section>
+
+    <!-- IP History Section -->
+    <section>
+      <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+        Histórico de IPs <span class="normal-case text-gray-600 font-normal">(mudanças recentes)</span>
+      </h2>
+      <!-- Desktop table -->
+      <div class="hidden sm:block bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-800 text-left">
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">IP</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Detectado em</th>
+            </tr>
+          </thead>
+          <tbody id="ip-history-table-body">
+            <tr><td colspan="2" class="px-4 py-8 text-center text-gray-600 text-sm">Aguardando dados...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Mobile cards -->
+      <div id="ip-history-cards" class="sm:hidden space-y-2"></div>
+    </section>
+
+
+    <!-- Timeline Section -->
+    <section>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Timeline de Eventos</h2>
+        <div class="flex items-center gap-2 text-xs text-gray-500">
+          <span>Total: <span id="timeline-total" class="text-gray-300 font-medium">—</span></span>
+          <span>Pág. <span id="timeline-page" class="text-gray-300 font-medium">1</span></span>
+          <button id="timeline-prev" class="px-2 py-1 rounded bg-gray-800 text-gray-400 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" disabled>←</button>
+          <button id="timeline-next" class="px-2 py-1 rounded bg-gray-800 text-gray-400 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" disabled>→</button>
+        </div>
+      </div>
+      <!-- Filters -->
+      <div class="flex flex-wrap gap-2 mb-3">
+        <div class="flex items-center gap-1">
+          <label for="timeline-from" class="text-xs text-gray-500">De:</label>
+          <input type="datetime-local" id="timeline-from"
+            class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-blue-500 w-44" />
+        </div>
+        <div class="flex items-center gap-1">
+          <label for="timeline-to" class="text-xs text-gray-500">Até:</label>
+          <input type="datetime-local" id="timeline-to"
+            class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-blue-500 w-44" />
+        </div>
+        <button id="timeline-filter-btn" class="px-3 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-500 transition-colors">Filtrar</button>
+        <button id="timeline-clear-btn" class="px-3 py-1 rounded bg-gray-800 text-gray-400 text-xs hover:bg-gray-700 transition-colors">Limpar</button>
+      </div>
+      <!-- Desktop table -->
+      <div class="hidden sm:block bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-800 text-left">
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Hora</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">IP</th>
+            </tr>
+          </thead>
+          <tbody id="timeline-table-body">
+            <tr><td colspan="3" class="px-4 py-8 text-center text-gray-600 text-sm">Aguardando dados...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Mobile cards -->
+      <div id="timeline-cards" class="sm:hidden space-y-1"></div>
+    </section>
+
+  </main>
+
+  <footer class="max-w-5xl mx-auto px-4 py-5 text-center text-xs text-gray-700">
+    Monitor de Rede — atualiza automaticamente a cada 30 segundos
+  </footer>
+
+
+  <script>
+    let timelinePageNum = 1;
+    let timelineFrom = '';
+    let timelineTo = '';
+    const POLL_INTERVAL = 30000;
+
+    async function poll() {
+      try {
+        const [statusRes, historyRes, timelineRes, chartRes, ipHistRes] = await Promise.all([
+          fetch('/api/status'),
+          fetch('/api/history'),
+          fetch(`/api/timeline?page=${timelinePageNum}&pageSize=20${timelineFrom ? '&from=' + timelineFrom : ''}${timelineTo ? '&to=' + timelineTo : ''}`),
+          fetch('/api/chart'),
+          fetch('/api/ip-history'),
+        ]);
+        if (statusRes.ok)   renderStatus(await statusRes.json());
+        if (historyRes.ok)  renderHistory(await historyRes.json());
+        if (timelineRes.ok) renderTimeline(await timelineRes.json());
+        if (chartRes.ok)    renderChart(await chartRes.json());
+        if (ipHistRes.ok)   renderIpHistory(await ipHistRes.json());
+      } catch (err) {
+        console.warn('[poll] failed:', err.message);
+      }
+    }
+
+    // ── Status ──────────────────────────────────────────────────────────────
+    function renderStatus(data) {
+      const online = data.currentStatus === 'online';
+      ['status-indicator','status-indicator-card'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('bg-gray-500','bg-green-500','bg-red-500');
+        el.classList.add(online ? 'bg-green-500' : 'bg-red-500');
+      });
+      ['status-text','status-text-card'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = data.currentStatus;
+        el.classList.remove('text-gray-400','text-gray-300','text-green-400','text-red-400');
+        el.classList.add(online ? 'text-green-400' : 'text-red-400');
+      });
+      const ipEl = document.getElementById('current-ip');
+      if (ipEl) ipEl.textContent = data.currentIp ?? '—';
+      const luEl = document.getElementById('last-updated');
+      if (luEl) luEl.textContent = data.lastUpdated ? new Date(data.lastUpdated).toLocaleString('pt-BR') : '—';
+      const otEl = document.getElementById('outages-today');
+      if (otEl) otEl.textContent = data.outagesToday ?? 0;
+      const dw = document.getElementById('current-outage-duration');
+      const dv = document.getElementById('current-outage-duration-value');
+      if (dw) {
+        if (data.currentOutageDuration != null) {
+          dw.classList.remove('hidden');
+          const m = data.currentOutageDuration;
+          if (dv) dv.textContent = m < 60 ? `${m} min` : `${Math.floor(m/60)}h ${m%60}min`;
+        } else { dw.classList.add('hidden'); }
+      }
+    }
+
+
+    // ── Chart ──────────────────────────────────────────────────────────────
+    function renderChart(data) {
+      window._lastChartData = data;
+      const container = document.getElementById('chart-container');
+      const uptimeEl  = document.getElementById('uptime-percent');
+      if (uptimeEl) uptimeEl.textContent = data.uptimePercent != null ? `${data.uptimePercent.toFixed(1)}%` : '—';
+
+      if (!data.points || data.points.length === 0) {
+        container.innerHTML = '<span class="text-gray-600 text-sm">Sem dados disponíveis</span>';
+        container.className = 'w-full min-h-[100px] flex items-center justify-center';
+        return;
+      }
+
+      const isMobile = window.innerWidth < 640;
+      // On mobile group into 4h blocks to avoid label overlap
+      let points = data.points;
+      if (isMobile && points.length > 8) {
+        const blocks = new Map();
+        for (const p of points) {
+          const h = parseInt(p.label.split(':')[0], 10);
+          const blockKey = Math.floor(h / 4) * 4;
+          const label = `${String(blockKey).padStart(2,'0')}h`;
+          if (!blocks.has(label)) blocks.set(label, { label, hasOffline: false });
+          if (p.status === 'offline') blocks.get(label).hasOffline = true;
+        }
+        points = Array.from(blocks.values()).map(b => ({
+          label: b.label,
+          status: b.hasOffline ? 'offline' : 'online',
+          timestamp: '',
+        }));
+      }
+
+      let barsHtml = '';
+      for (const p of points) {
+        const color = p.status === 'online' ? 'bg-green-500' : 'bg-red-500';
+        barsHtml += `
+          <div class="chart-bar flex-1 ${color} rounded opacity-80 hover:opacity-100 transition-opacity" style="min-width:8px;height:100%">
+            <div class="chart-tip">${p.label} · ${p.status}</div>
+          </div>`;
+      }
+
+      // Show every label on desktop, every other on mobile blocks
+      let labelsHtml = '';
+      points.forEach((p, i) => {
+        const show = !isMobile || points.length <= 12 || i % 2 === 0;
+        labelsHtml += `<span class="flex-1 text-center text-[10px] sm:text-xs text-gray-500 truncate" style="min-width:8px">${show ? p.label : ''}</span>`;
+      });
+
+      container.className = 'w-full flex flex-col gap-2';
+      container.innerHTML = `
+        <div class="flex items-end gap-[3px] w-full" style="height:120px">${barsHtml}</div>
+        <div class="flex gap-[3px] w-full">${labelsHtml}</div>`;
+    }
+
+
+    // ── Outages ─────────────────────────────────────────────────────────────
+    function renderHistory(data) {
+      const tbody = document.getElementById('outages-table-body');
+      const cards = document.getElementById('outages-cards');
+
+      if (!data.outages || data.outages.length === 0) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-600 text-sm">Nenhuma queda registrada</td></tr>';
+        if (cards) cards.innerHTML = '<p class="text-gray-600 text-sm text-center py-6">Nenhuma queda registrada</p>';
+        return;
+      }
+
+      const rows = data.outages.map(o => {
+        const startStr = new Date(o.start).toLocaleString('pt-BR');
+        const endStr   = o.end ? new Date(o.end).toLocaleString('pt-BR') : '<span class="text-red-400">Em curso</span>';
+        const dur = o.durationMinutes == null ? '—'
+          : o.durationMinutes >= 60 ? `${Math.floor(o.durationMinutes/60)}h ${o.durationMinutes%60}min`
+          : `${o.durationMinutes} min`;
+        return { id: o.id, startStr, endStr, dur, count: o.entriesCount };
+      });
+
+      if (tbody) {
+        tbody.innerHTML = rows.map(r => `
+          <tr class="border-b border-gray-800/50">
+            <td class="px-4 py-3 text-gray-400 text-xs">${r.id}</td>
+            <td class="px-4 py-3 text-gray-300 text-xs font-mono">${r.startStr}</td>
+            <td class="px-4 py-3 text-gray-300 text-xs font-mono">${r.endStr}</td>
+            <td class="px-4 py-3 text-gray-300 text-xs">${r.dur}</td>
+            <td class="px-4 py-3 text-gray-300 text-xs">${r.count}</td>
+          </tr>`).join('');
+      }
+
+      if (cards) {
+        cards.innerHTML = rows.map(r => `
+          <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 text-xs space-y-1">
+            <div class="flex justify-between">
+              <span class="text-gray-500">Início</span>
+              <span class="font-mono text-gray-300">${r.startStr}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Fim</span>
+              <span class="font-mono text-gray-300">${r.endStr}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Duração</span>
+              <span class="text-gray-300">${r.dur}</span>
+            </div>
+          </div>`).join('');
+      }
+    }
+
+
+    // ── IP History ──────────────────────────────────────────────────────────
+    function renderIpHistory(data) {
+      const tbody = document.getElementById('ip-history-table-body');
+      const cards = document.getElementById('ip-history-cards');
+
+      if (!data.ipHistory || data.ipHistory.length === 0) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="2" class="px-4 py-8 text-center text-gray-600 text-sm">Nenhuma mudança de IP registrada</td></tr>';
+        if (cards) cards.innerHTML = '<p class="text-gray-600 text-sm text-center py-6">Nenhuma mudança de IP registrada</p>';
+        return;
+      }
+
+      const rows = data.ipHistory.map(item => ({
+        ip: item.ip,
+        since: new Date(item.since).toLocaleString('pt-BR'),
+      }));
+
+      if (tbody) {
+        tbody.innerHTML = rows.map(r => `
+          <tr class="border-b border-gray-800/50">
+            <td class="px-4 py-3 text-blue-400 text-xs font-mono font-semibold">${r.ip}</td>
+            <td class="px-4 py-3 text-gray-400 text-xs font-mono">${r.since}</td>
+          </tr>`).join('');
+      }
+
+      if (cards) {
+        cards.innerHTML = rows.map(r => `
+          <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 text-xs flex justify-between items-center">
+            <span class="text-blue-400 font-mono font-semibold">${r.ip}</span>
+            <span class="text-gray-500 font-mono">${r.since}</span>
+          </div>`).join('');
+      }
+    }
+
+
+    // ── Timeline ─────────────────────────────────────────────────────────────
+    function renderTimeline(data) {
+      const tbody  = document.getElementById('timeline-table-body');
+      const cards  = document.getElementById('timeline-cards');
+      const totalEl = document.getElementById('timeline-total');
+      const pageEl  = document.getElementById('timeline-page');
+      const prevBtn = document.getElementById('timeline-prev');
+      const nextBtn = document.getElementById('timeline-next');
+
+      if (totalEl) totalEl.textContent = data.total;
+      if (pageEl)  pageEl.textContent  = data.page;
+      const totalPages = Math.ceil(data.total / data.pageSize) || 1;
+      if (prevBtn) prevBtn.disabled = data.page <= 1;
+      if (nextBtn) nextBtn.disabled = data.page >= totalPages;
+
+      if (!data.entries || data.entries.length === 0) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-gray-600 text-sm">Nenhum registro</td></tr>';
+        if (cards) cards.innerHTML = '<p class="text-gray-600 text-sm text-center py-6">Nenhum registro</p>';
+        return;
+      }
+
+      let lastDate = '';
+      let tableRows = '';
+      let cardItems = '';
+
+      data.entries.forEach(entry => {
+        const online = entry.status === 'online';
+        const d = new Date(entry.timestamp);
+        const dateStr = d.toLocaleDateString('pt-BR');
+        const timeStr = d.toLocaleTimeString('pt-BR');
+        const statusColor = online ? 'text-green-400' : 'text-red-400';
+        const ipDisplay   = entry.ip ?? '—';
+        const ipChanged   = entry.ipChanged ? 'border-l-2 border-l-amber-400 bg-amber-400/5' : '';
+
+        // Day separator
+        if (dateStr !== lastDate) {
+          tableRows += `<tr class="bg-gray-800/60"><td colspan="3" class="px-4 py-1.5 text-xs font-semibold text-gray-400">📅 ${dateStr}</td></tr>`;
+          cardItems += `<div class="text-xs font-semibold text-gray-400 px-1 pt-2">📅 ${dateStr}</div>`;
+          lastDate = dateStr;
+        }
+
+        tableRows += `
+          <tr class="border-b border-gray-800/40 ${ipChanged}">
+            <td class="px-4 py-2 text-gray-300 text-xs font-mono">${timeStr}</td>
+            <td class="px-4 py-2 text-xs font-semibold uppercase ${statusColor}">${entry.status}</td>
+            <td class="px-4 py-2 text-xs font-mono text-gray-400">${ipDisplay}</td>
+          </tr>`;
+
+        cardItems += `
+          <div class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs flex items-center justify-between ${ipChanged}">
+            <span class="font-mono text-gray-400">${timeStr}</span>
+            <span class="font-semibold uppercase ${statusColor}">${entry.status}</span>
+            <span class="font-mono text-gray-500">${ipDisplay}</span>
+          </div>`;
+      });
+
+      if (tbody) tbody.innerHTML = tableRows;
+      if (cards) cards.innerHTML = cardItems;
+    }
+
+    // ── Controls ─────────────────────────────────────────────────────────────
+    document.getElementById('timeline-prev').addEventListener('click', () => {
+      if (timelinePageNum > 1) { timelinePageNum--; poll(); }
+    });
+    document.getElementById('timeline-next').addEventListener('click', () => {
+      timelinePageNum++; poll();
+    });
+    document.getElementById('timeline-filter-btn').addEventListener('click', () => {
+      timelineFrom = document.getElementById('timeline-from').value || '';
+      timelineTo   = document.getElementById('timeline-to').value   || '';
+      timelinePageNum = 1; poll();
+    });
+    document.getElementById('timeline-clear-btn').addEventListener('click', () => {
+      document.getElementById('timeline-from').value = '';
+      document.getElementById('timeline-to').value   = '';
+      timelineFrom = ''; timelineTo = ''; timelinePageNum = 1; poll();
+    });
+
+    // Re-render chart on resize to switch mobile/desktop layout
+    window.addEventListener('resize', () => {
+      if (window._lastChartData) renderChart(window._lastChartData);
+    });
+
+    poll();
+    setInterval(poll, POLL_INTERVAL);
+  </script>
+</body>
+</html>
