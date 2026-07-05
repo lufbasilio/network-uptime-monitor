@@ -10,6 +10,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // ── Environment config ─────────────────────────────────────────────────────
 const LOG_FILE_PATH = process.env.LOG_FILE_PATH;
 const PORT = parseInt(process.env.PORT) || 3000;
+const ROUTER_URL = process.env.ROUTER_URL || null;
+const SPEEDTEST_URL = process.env.SPEEDTEST_URL || 'https://www.speedtest.net';
 
 // Reject initialization if LOG_FILE_PATH is not set (Requirement 15.3)
 if (!LOG_FILE_PATH) {
@@ -32,6 +34,15 @@ watcher.start(LOG_FILE_PATH, async () => {
 // ── Routes ─────────────────────────────────────────────────────────────────
 // API routes at /api/*
 app.use('/api', createApiRouter(stateManager));
+
+// Config endpoint — exposes safe public config to frontend
+app.get('/api/config', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    routerUrl: ROUTER_URL,
+    speedtestUrl: SPEEDTEST_URL,
+  });
+});
 
 // Serve static files from frontend/ (Requirement 11.2)
 const frontendDir = join(__dirname, '..', 'frontend');
